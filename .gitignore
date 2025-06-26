@@ -1,0 +1,10 @@
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore environment files with secrets
+.env
+
+# Ignore other OS/editor files if needed
+.vscode/
+.DS_Store
