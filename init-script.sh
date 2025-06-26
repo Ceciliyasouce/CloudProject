@@ -14,8 +14,8 @@ pip3 install -r requirements.txt
 
 # Write .env file from passed values
 cat <<EOF > .env
-connection_string=${CONNECTION_STRING}
-container_name=${CONTAINER_NAME}
+CONNECTION_STRING=${CONNECTION_STRING}
+CONTAINER_NAME=${CONTAINER_NAME}
 EOF
 
 # Run the app with gunicorn
