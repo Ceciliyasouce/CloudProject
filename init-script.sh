@@ -29,11 +29,18 @@ cd flaskapp
 # Install dependencies
 pip3 install -r requirements.txt
 
-# Write .env file from passed values
+set -e
+
+echo "Connection String: $CONNECTION_STRING"
+echo "Container Name: $CONTAINER_NAME"
+
+# Then write them to .env file
+
 cat <<EOF > .env
-CONNECTION_STRING=${CONNECTION_STRING}
-CONTAINER_NAME=${CONTAINER_NAME}
+CONNECTION_STRING=$CONNECTION_STRING
+CONTAINER_NAME=$CONTAINER_NAME
 EOF
+
 
 # Run the app with gunicorn
 nohup gunicorn -w 2 -b 0.0.0.0:${PORT} app:app &
