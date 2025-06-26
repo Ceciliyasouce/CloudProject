@@ -23,7 +23,7 @@ sudo make altinstall
 
 # Clone your GitHub repo
 cd /home/azureuser
-git clone https://github.com/your-username/your-repo.git flaskapp
+git clone https://github.com/Ceciliyasouce/CloudProject.git flaskapp
 cd flaskapp
 
 # Install dependencies
