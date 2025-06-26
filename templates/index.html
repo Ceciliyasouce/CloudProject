@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Property Input Form</title>
+</head>
+<body>
+  <h2>Enter Property Details</h2>
+  <form action="/submit" method="post">
+    
+    <!-- Location -->
+    <label for="location">Location:</label>
+    <select name="location" id="location">
+      <option value="">--Select Location--</option>
+      <option value="1 Annasandrapalya">1 Annasandrapalya</option>
+      <option value="1 Giri Nagar">1 Giri Nagar</option>
+      <option value="1 Immadihalli">1 Immadihalli</option>
+      <option value="1 Ramamurthy Nagar">1 Ramamurthy Nagar</option>
+      <option value="st Phase JP Nagar">st Phase JP Nagar</option>
+    </select>
+    <br><br>
+
+    <!-- Sqft -->
+    <label for="sqft">Square Footage:</label>
+    <select name="sqft" id="sqft">
+      <option value="">--Select Sqft--</option>
+      <option value="500">500</option>
+      <option value="1000">1000</option>
+      <option value="1500">1500</option>
+      <option value="2000">2000</option>
+      <option value="2500">2500</option>
+    </select>
+    <br><br>
+
+    <!-- Bath -->
+    <label for="bath">Bathrooms:</label>
+    <select name="bath" id="bath">
+      <option value="">--Select Bathrooms--</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+    </select>
+    <br><br>
+
+    <!-- Size -->
+    <label for="size">Size (BHK):</label>
+    <select name="size" id="size">
+      <option value="">--Select Size--</option>
+      <option value="1">1 BHK</option>
+      <option value="2">2 BHK</option>
+      <option value="3">3 BHK</option>
+      <option value="4">4 BHK</option>
+    </select>
+    <br><br>
+
+    <input type="submit" value="Submit">
+
+  </form>
+</body>
+</html>
