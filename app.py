@@ -54,8 +54,8 @@ def submit():
     
 
 def user_input(form_data):
-    connection_string =  os.getenv('connection_string')
-    container_name = os.getenv('container_name')
+    connection_string =  os.getenv('CONNECTION_STRING')
+    container_name = os.getenv('CONTAINER_NAME')
     blob_name = "models/linear_model.pkl"
     local_file_path = "linear_model.pkl"
 
