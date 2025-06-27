@@ -264,7 +264,7 @@ if __name__ == '__main__':
     except Exception as e:
         logger.warning(f"Could not pre-load model: {str(e)}")
     
-    port = int(os.getenv('PORT', 8000))
+    port = int(os.getenv('PORT', 5000))
     logger.info(f"Starting server on port {port}")
     
     app.run(host='0.0.0.0', port=port, debug=True)
