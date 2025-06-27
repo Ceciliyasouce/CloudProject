@@ -76,7 +76,7 @@ User=azureuser
 WorkingDirectory=/home/azureuser/flaskapp
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=/home/azureuser/flaskapp/.env
-ExecStart=/usr/local/bin/gunicorn -w 2 -b 0.0.0.0:${PORT:-5000} app:app
+ExecStart=/usr/local/bin/gunicorn -w 2 -b 0.0.0.0:${PORT:-5000} flaskapp:flaskapp
 Restart=always
 RestartSec=10
 
