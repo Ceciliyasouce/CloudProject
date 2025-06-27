@@ -9,9 +9,17 @@ import os
 from dotenv import load_dotenv
 import sys
 import traceback
+import logging
 
-# Also, sometimes patch _new_Index as an attribute
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Patch for pandas compatibility
 setattr(pd.Index, '_new_Index', pd.Index)
+sys.modules['pandas.core.indexes.base'] = pd.Index
+sys.modules['pandas.core.indexes.base.Index'] = pd.Index
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -19,77 +27,92 @@ app = Flask(__name__)
 # Global variables to cache the model and columns
 lr_model = None
 feature_columns = None
+blob_service_client = None
+
+def get_blob_service_client():
+    """Get or create blob service client"""
+    global blob_service_client
+    
+    if blob_service_client is None:
+        connection_string = os.getenv('CONNECTION_STRING')
+        if not connection_string:
+            raise ValueError("CONNECTION_STRING not found in environment variables")
+        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+        logger.info("BlobServiceClient created")
+    
+    return blob_service_client
+
+def download_blob_content(container_name, blob_name):
+    """Download blob content using the most reliable method"""
+    try:
+        client = get_blob_service_client()
+        blob_client = client.get_blob_client(container=container_name, blob=blob_name)
+        
+        # Method 1: Try content_as_bytes() - most reliable
+        try:
+            logger.info(f"Downloading {blob_name} using content_as_bytes()")
+            blob_data = blob_client.download_blob().content_as_bytes()
+            logger.info(f"Successfully downloaded {blob_name} ({len(blob_data)} bytes)")
+            return blob_data
+        except Exception as e:
+            logger.warning(f"content_as_bytes() failed for {blob_name}: {str(e)}")
+            
+        # Method 2: Fallback to readall()
+        try:
+            logger.info(f"Downloading {blob_name} using readall() fallback")
+            download_stream = blob_client.download_blob()
+            blob_data = download_stream.readall()
+            logger.info(f"Successfully downloaded {blob_name} with fallback ({len(blob_data)} bytes)")
+            return blob_data
+        except Exception as e:
+            logger.error(f"readall() fallback also failed for {blob_name}: {str(e)}")
+            raise
+            
+    except Exception as e:
+        logger.error(f"Failed to download {blob_name}: {str(e)}")
+        raise
 
 def load_model_and_columns():
     """Load model and feature columns once and cache them globally"""
     global lr_model, feature_columns
     
-    print("=== Starting load_model_and_columns ===")
+    logger.info("Starting load_model_and_columns")
     
     if lr_model is not None and feature_columns is not None:
-        print("Model and columns already cached, returning cached version")
+        logger.info("Model and columns already cached")
         return lr_model, feature_columns
     
-    connection_string = os.getenv('CONNECTION_STRING')
     container_name = os.getenv('CONTAINER_NAME')
+    if not container_name:
+        raise ValueError("CONTAINER_NAME not found in environment variables")
     
-    print(f"CONNECTION_STRING exists: {bool(connection_string)}")
-    print(f"CONTAINER_NAME: {container_name}")
-    
-    if not connection_string or not container_name:
-        raise ValueError("CONNECTION_STRING or CONTAINER_NAME not found in environment variables")
+    logger.info(f"Container name: {container_name}")
     
     try:
-        # Connect to Azure Blob Storage
-        print("Creating BlobServiceClient...")
-        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-        print("BlobServiceClient created successfully")
-        
         # Load the model
-        print("=== Loading Model ===")
+        logger.info("Loading model...")
         model_blob_name = "models/linear_model.pkl"
-        print(f"Getting blob client for: {model_blob_name}")
-        model_blob_client = blob_service_client.get_blob_client(container=container_name, blob=model_blob_name)
+        model_bytes = download_blob_content(container_name, model_blob_name)
         
-        print("Starting model download...")
-        model_download_stream = model_blob_client.download_blob()
-        print("Model download stream created")
-        
-        print("Reading model bytes...")
-        model_bytes = model_download_stream.readall()
-        print(f"Model bytes read successfully, size: {len(model_bytes)} bytes")
-        
-        print("Loading model with cloudpickle...")
+        # Load model from bytes
         model_buffer = BytesIO(model_bytes)
         lr_model = cloudpickle.load(model_buffer)
-        print("Model loaded successfully")
+        logger.info("Model loaded successfully")
         
         # Load feature columns
-        print("=== Loading Feature Columns ===")
+        logger.info("Loading feature columns...")
         columns_blob_name = "models/X_columns.json"
-        print(f"Getting blob client for: {columns_blob_name}")
-        columns_blob_client = blob_service_client.get_blob_client(container=container_name, blob=columns_blob_name)
+        columns_bytes = download_blob_content(container_name, columns_blob_name)
         
-        print("Starting columns download...")
-        columns_download_stream = columns_blob_client.download_blob()
-        print("Columns download stream created")
-        
-        print("Reading columns bytes...")
-        columns_bytes = columns_download_stream.readall()
-        print(f"Columns bytes read successfully, size: {len(columns_bytes)} bytes")
-        
-        print("Parsing JSON...")
+        # Parse JSON
         json_str = columns_bytes.decode('utf-8')
         feature_columns = json.loads(json_str)
-        print(f"Feature columns loaded successfully, count: {len(feature_columns)}")
+        logger.info(f"Feature columns loaded successfully ({len(feature_columns)} columns)")
         
-        print("=== load_model_and_columns completed successfully ===")
         return lr_model, feature_columns
         
     except Exception as e:
-        print(f"ERROR in load_model_and_columns: {str(e)}")
-        print(f"ERROR type: {type(e)}")
-        print("Full traceback:")
+        logger.error(f"Error in load_model_and_columns: {str(e)}")
         traceback.print_exc()
         raise
 
@@ -97,69 +120,75 @@ def load_model_and_columns():
 def home():
     return render_template('index.html')
 
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    try:
+        # Try to load model to verify everything is working
+        model, columns = load_model_and_columns()
+        return {
+            "status": "healthy",
+            "model_loaded": model is not None,
+            "columns_count": len(columns) if columns else 0
+        }
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}, 500
+
 @app.route('/submit', methods=['POST'])
 def submit():
-    print("=== Submit route called ===")
+    logger.info("Submit route called")
     try:
-        # Access form inputs from the HTML
-        location = request.form.get('location')
-        sqft = request.form.get('sqft')
-        bath = request.form.get('bath')
-        size = request.form.get('size')
+        # Get form data
+        form_data = {}
+        required_fields = ['location', 'sqft', 'bath', 'size']
         
-        print(f"Form data received: location={location}, sqft={sqft}, bath={bath}, size={size}")
-
-        # Validate inputs
-        if not all([location, sqft, bath, size]):
-            print("ERROR: Missing form fields")
-            return "Error: All fields are required", 400
-
-        # Convert numeric inputs
+        for field in required_fields:
+            value = request.form.get(field)
+            if not value:
+                return f"Error: {field} is required", 400
+            form_data[field] = value
+        
+        logger.info(f"Form data received: {form_data}")
+        
+        # Convert and validate numeric inputs
         try:
-            sqft = float(sqft)
-            bath = int(bath)
-            size = int(size)
-            print(f"Converted values: sqft={sqft}, bath={bath}, size={size}")
+            form_data['sqft'] = float(form_data['sqft'])
+            form_data['bath'] = int(form_data['bath'])
+            form_data['size'] = int(form_data['size'])
         except ValueError as e:
-            print(f"ERROR converting numeric inputs: {str(e)}")
+            logger.error(f"Invalid numeric input: {str(e)}")
             return "Error: Invalid numeric input", 400
-
-        # Store in a dictionary
-        form_data = {
-            'location': location,
-            'sqft': sqft,
-            'bath': bath,
-            'size': size
-        }
-
-        print("Calling predict_price...")
+        
+        # Validate ranges
+        if form_data['sqft'] <= 0 or form_data['sqft'] > 50000:
+            return "Error: Square feet must be between 1 and 50,000", 400
+        if form_data['bath'] <= 0 or form_data['bath'] > 20:
+            return "Error: Bathrooms must be between 1 and 20", 400
+        if form_data['size'] <= 0 or form_data['size'] > 20:
+            return "Error: Size (BHK) must be between 1 and 20", 400
         
         # Get prediction
         prediction = predict_price(form_data)
-        print(f"Prediction received: {prediction}")
+        logger.info(f"Prediction: {prediction}")
         
         return render_template('output.html', 
                              location=form_data['location'],
                              sqft=form_data['sqft'],
                              bath=form_data['bath'],
                              size=form_data['size'],
-                             ans=int(prediction))
+                             ans=round(prediction, 2))
                              
     except Exception as e:
-        print(f"ERROR in submit route: {str(e)}")
-        print(f"ERROR type: {type(e)}")
-        print("Full traceback:")
+        logger.error(f"Error in submit route: {str(e)}")
         traceback.print_exc()
         return f"Error processing request: {str(e)}", 500
 
 def predict_price(form_data):
     """Make prediction using cached model and columns"""
-    print("=== predict_price called ===")
+    logger.info("predict_price called")
     try:
-        print("Loading model and columns...")
         # Load model and columns (cached after first load)
         model, columns = load_model_and_columns()
-        print("Model and columns loaded successfully")
         
         # Extract input values
         location = form_data['location']
@@ -167,20 +196,16 @@ def predict_price(form_data):
         bath = form_data['bath']
         bhk = form_data['size']
         
-        print(f"Input values: location={location}, sqft={sqft}, bath={bath}, bhk={bhk}")
+        logger.info(f"Prediction inputs: location={location}, sqft={sqft}, bath={bath}, bhk={bhk}")
         
         # Convert columns to numpy array for easier searching
-        print("Converting columns to numpy array...")
         columns_array = np.array(columns)
-        print(f"Columns array shape: {columns_array.shape}")
         
         # Find location index
-        print(f"Looking for location '{location}' in columns...")
         loc_indices = np.where(columns_array == location)[0]
-        print(f"Location indices found: {loc_indices}")
+        logger.info(f"Location '{location}' found at indices: {loc_indices}")
         
         # Create feature vector
-        print("Creating feature vector...")
         x = np.zeros(len(columns))
         x[0] = sqft
         x[1] = bath
@@ -189,47 +214,57 @@ def predict_price(form_data):
         # Set location feature if found
         if len(loc_indices) > 0:
             x[loc_indices[0]] = 1
-            print(f"Set location feature at index {loc_indices[0]}")
+            logger.info(f"Set location feature at index {loc_indices[0]}")
         else:
-            print("Location not found in columns")
-        
-        print(f"Feature vector: {x[:10]}...")  # Show first 10 elements
+            logger.warning(f"Location '{location}' not found in feature columns")
         
         # Make prediction
-        print("Making prediction...")
         prediction = model.predict([x])[0]
+        logger.info(f"Raw prediction: {prediction}")
         
-        print(f"Prediction completed: {prediction}")
         return prediction
         
     except Exception as e:
-        print(f"ERROR in predict_price: {str(e)}")
-        print(f"ERROR type: {type(e)}")
-        print("Full traceback:")
+        logger.error(f"Error in predict_price: {str(e)}")
         traceback.print_exc()
         raise
 
 @app.errorhandler(500)
 def internal_error(error):
-    print(f"500 error handler called: {error}")
-    return "Internal server error occurred", 500
+    logger.error(f"500 error: {error}")
+    return "Internal server error occurred. Please try again later.", 500
 
 @app.errorhandler(404)
 def not_found(error):
-    print(f"404 error handler called: {error}")
     return "Page not found", 404
 
+# @app.before_first_request
+# def initialize():
+#     """Initialize the application"""
+#     try:
+#         logger.info("Initializing application...")
+#         load_model_and_columns()
+#         logger.info("Application initialized successfully")
+#     except Exception as e:
+#         logger.error(f"Failed to initialize application: {str(e)}")
+#         # Don't raise here to allow the app to start, but log the error
+
 if __name__ == '__main__':
-    print("=== Flask App Starting ===")
-    try:
-        # Pre-load model and columns on startup
-        print("Pre-loading model and columns...")
-        load_model_and_columns()
-        print("Model and columns pre-loaded successfully")
-    except Exception as e:
-        print(f"Warning: Could not pre-load model: {str(e)}")
-        print("Full traceback:")
-        traceback.print_exc()
+    # Set up logging for development
+    if os.getenv('FLASK_ENV') == 'development':
+        app.config['DEBUG'] = True
+        logging.getLogger().setLevel(logging.DEBUG)
     
-    print("Starting Flask server...")
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
+    logger.info("Starting Flask application")
+    
+    # Try to pre-load model
+    try:
+        load_model_and_columns()
+        logger.info("Model pre-loaded successfully")
+    except Exception as e:
+        logger.warning(f"Could not pre-load model: {str(e)}")
+    
+    port = int(os.getenv('PORT', 8000))
+    logger.info(f"Starting server on port {port}")
+    
+    app.run(host='0.0.0.0', port=port, debug=True)
