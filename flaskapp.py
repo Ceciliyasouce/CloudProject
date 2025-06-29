@@ -22,7 +22,7 @@ sys.modules['pandas.core.indexes.base.Index'] = pd.Index
 
 load_dotenv()
 
-app = Flask(__name__)
+flaskapp = Flask(__name__)
 
 # Global variables to cache the model and columns
 lr_model = None
@@ -116,11 +116,11 @@ def load_model_and_columns():
         traceback.print_exc()
         raise
 
-@app.route('/')
+@flaskapp.route('/')
 def home():
     return render_template('index.html')
 
-@app.route('/health')
+@flaskapp.route('/health')
 def health():
     """Health check endpoint"""
     try:
@@ -134,7 +134,7 @@ def health():
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}, 500
 
-@app.route('/submit', methods=['POST'])
+@flaskapp.route('/submit', methods=['POST'])
 def submit():
     logger.info("Submit route called")
     try:
@@ -229,16 +229,16 @@ def predict_price(form_data):
         traceback.print_exc()
         raise
 
-@app.errorhandler(500)
+@flaskapp.errorhandler(500)
 def internal_error(error):
     logger.error(f"500 error: {error}")
     return "Internal server error occurred. Please try again later.", 500
 
-@app.errorhandler(404)
+@flaskapp.errorhandler(404)
 def not_found(error):
     return "Page not found", 404
 
-# @app.before_first_request
+# @flaskapp.before_first_request
 # def initialize():
 #     """Initialize the application"""
 #     try:
@@ -252,7 +252,7 @@ def not_found(error):
 if __name__ == '__main__':
     # Set up logging for development
     if os.getenv('FLASK_ENV') == 'development':
-        app.config['DEBUG'] = True
+        flaskapp.config['DEBUG'] = True
         logging.getLogger().setLevel(logging.DEBUG)
     
     logger.info("Starting Flask application")
@@ -267,4 +267,4 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     logger.info(f"Starting server on port {port}")
     
-    app.run(host='0.0.0.0', port=port, debug=True)
+    flaskapp.run(host='0.0.0.0', port=port, debug=True)
