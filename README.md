@@ -1,20 +1,26 @@
-# CloudProject
+# Cloud Project
+**Workflow**
 
-# About
-**1. Data Input / Source**
-Data is collected from external or predefined sources.
-**2. Data Processing**
-The data is cleaned, transformed, and prepared using Python scripts.
-**3. Storage / Cloud Integration**
-Processed data is stored or managed using cloud services.
-**4. Application Layer**
-The application interacts with the processed data to perform required operations or provide outputs.
-**5. Deployment**
-The application and services are deployed using cloud and containerization tools.
+Run the init script to set up and start the project.
 
-# How to Run
+_The script:_
 
-1. git clone https://github.com/Ceciliyasouce/CloudProject.git
-2. cd CloudProject
-3. Set up env variables
-4. python main.py
+1. Installs Python and required packages from requirements.txt
+2. Creates a .env file
+3. Sets up Gunicorn in the VM
+4. Starts the Flask app (flaskapp.py)
+
+_Parameters:_
+
+Provide these while running the script:
+
+* CONNECTION_STRING
+* CONTAINER_NAME
+* PORT
+  
+_Run:_
+
+./init.sh "<CONNECTION_STRING>" "<CONTAINER_NAME>" "<PORT>"
+
+_Access:_
+http://<VM_IP>:<PORT>
